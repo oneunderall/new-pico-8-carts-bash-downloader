@@ -28,6 +28,6 @@ For multiple pages:
 
 > chmod +x picodownload.sh
 
-> for i in {1..10}; do ./picodownload.sh -p "https://www.lexaloffle.com/bbs/?cat=7&carts_tab=1&page=$i" done
+> for i in {1..10}; do ./picodownload.sh -p "https://www.lexaloffle.com/bbs/?cat=7&carts_tab=1&page=$i"; done;
 
 Change ?cat= to select other forums. Can probably do it from favorites too.
