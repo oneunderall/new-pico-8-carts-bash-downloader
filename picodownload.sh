@@ -1,234 +1,95 @@
-#!/bin/bash
-
 # *******************************************************************
 # Change this to the directory you want the file to be downloaded to:
 readonly DOWNLOAD_DIR="/home/bob/.lexaloffle/pico-8/carts/incoming"
+
+#mkdir -p "$DOWNLOAD_DIR"
 # *******************************************************************
 
-# v0.3 - March 23, 2017
+# v1.0 - November 12, 2025
 
-readonly TMPFILE="lexaloffle-tmp.html"
-readonly TMP_TXTFILE="lexaloffle-tmp.txt"
-readonly LEXALOFFLE_ID_URL="http://www.lexaloffle.com/bbs/?tid="
-readonly ARGS="$@"
+TMPFILE="lexaloffle-tmp.html"
+TMP_TXTFILE="lexaloffle-tmp.txt"
+LEXALOFFLE_ID_URL="https://www.lexaloffle.com/bbs/?tid="
 
-main(){
-
-	cmdline $ARGS
+main() {
+    cmdline "$@"
 }
 
 cart_download() {
-	
-	local URL="$1"
-	download_tmp_html_page "$URL"
+    local URL="$1"
+    echo "[INFO] Downloading thread: $URL"
+    curl -sL "$URL" -o "$TMPFILE"
 
-	local BBS_ID=$(get_BBS_ID)
-	local GAME_ID=$(get_GAME_ID)
-	local AUTHOR_NAME=$(get_AUTHOR_NAME "$GAME_ID")
-	local GAME_TITLE=$(get_GAME_TITLE "$GAME_ID")
-	local DOWNLOAD_URL=$(get_DOWNLOAD_URL)
+    local FINAL_FILENAME=$(get_DOWNLOAD_FILENAME)
+    local DOWNLOAD_URL=$(get_DOWNLOAD_URL)
 
-	#You can edit this variable to change the final name of the cart:	
-	local FINAL_FILENAME="$AUTHOR_NAME"_"$GAME_TITLE"_"$BBS_ID"_"$GAME_ID".p8.png
-		
-	download_file $DOWNLOAD_URL
-	delete_tmp_html_page
+    if [[ -z "$DOWNLOAD_URL" ]]; then
+        echo "[WARN] No cart found for thread $URL"
+    else
+        echo "[INFO] Downloading cart: $FINAL_FILENAME"
+        curl -sL "$DOWNLOAD_URL" -o "$DOWNLOAD_DIR/$FINAL_FILENAME"
+    fi
+
+    rm -f "$TMPFILE"
 }
 
 get_DOWNLOAD_URL() {
-
-	local SEARCH_STRING="toggle_playarea(pa,""$GAME_ID"
-
-	local DL_URL=$(cat "$TMPFILE" \
-		| grep "$SEARCH_STRING" \
-		| cut -d "/" -f 2- \
-		| sed -e "s/[^a-z|0-9|/|.]//g"
-		)
-
-	echo "http://www.lexaloffle.com/""$DL_URL"
-
+    local DL_URL=$(grep -oP '<a[^>]+href="\K/bbs/cposts/.*?\.p8\.png' "$TMPFILE" | head -n1)
+    if [[ -n "$DL_URL" ]]; then
+        echo "https://www.lexaloffle.com$DL_URL"
+    fi
 }
 
-download_file() {
+get_DOWNLOAD_FILENAME() {
+    local AUTHOR=$(grep -oP '<a[^>]+href="\?uid=[0-9]+[^>]*>[^<]+' "$TMPFILE" | head -n1 | sed 's/.*>\(.*\)/\1/')
+    local TITLE=$(grep -oP '<div style="font-size:16pt;[^"]*">.*?</div>' "$TMPFILE" | head -n1 | sed 's/.*>\(.*\)<.*/\1/')
+    local TID=$(echo "$URL" | grep -oP '[0-9]+$')
 
-	echo "Downloading: ""$FINAL_FILENAME"
-	wget --quiet $1 -O "$DOWNLOAD_DIR/$FINAL_FILENAME"
-}
+    AUTHOR=$(echo "$AUTHOR" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '_')
+    TITLE=$(echo "$TITLE" | tr '[:upper:]' '[:lower:]' | tr -c '[:alnum:]' '_')
 
-clean_string() {
-
-	local DIRTY_HAMSTER=`echo $1 \
-		| tr '[A-Z]' '[a-z]' \
-		| sed -e "s/[^a-z|0-9| |.]//g" \
-		| tr -s " " \
-		| tr -s "." \
-		| tr " " "-"`
-
-	echo $DIRTY_HAMSTER
-
-}
-
-get_GAME_TITLE() {
-
-	local SEARCH_STRING=$1'\"\].title'
-
-	local TITLE=$(cat "$TMPFILE" \
-		| grep "$SEARCH_STRING" \
-		| cut -d ">" -f2 \
-		| cut -d "<" -f1
-		)
-
-	TITLE=$(clean_string "$TITLE")
-	echo "$TITLE"
-}
-
-get_AUTHOR_NAME() {
-
-	local SEARCH_STRING=$1'\"\].author'
-
-	local AUTHOR=$(cat "$TMPFILE" \
-		| grep "$SEARCH_STRING" \
-	 	| cut -d ">" -f 2- \
-		| cut -d "<" -f1
-		)
-
-	AUTHOR=$(clean_string "$AUTHOR")
-	echo "$AUTHOR"
-}
-
-get_GAME_ID() {
-
-	local ID=$(cat "$TMPFILE" \
-		| grep "pa_pid\[0\]" \
-		| cut -d "=" -f 2- \
-		| sed -e s/[^0-9]*//g
-		)
-
-	echo $ID
-}
-
-get_BBS_ID() {
-
-	local ID=$(echo "$URL" \
-		| cut -d "=" -f 2- \
-		| cut -d "#" -f1
-		)
-
-		# cleaning regular urls: cut -d "=" -f 2-
-		# http://www.lexaloffle.com/bbs/?pid=17977
-		
-		# cleaning urls with anchors: cut -d "#" -f1
-		# http://www.lexaloffle.com/bbs/?pid=17977#p17977
-
-	echo $ID
-}
-
-download_tmp_html_page() {
-
-#	is_empty $URL \
-#		&& usage_no_url \
-#		|| wget --quiet --output-document="$TMPFILE" "$URL"
-
-	local URL="$1"
-	wget --quiet --output-document="$TMPFILE" "$URL"
-}
-
-delete_tmp_html_page() {
-	rm "$TMPFILE"
-}
-
-is_empty() {
-    local var=$1
-    [[ -z $var ]]
-}
-
-is_not_empty() {
-    local var=$1
-    [[ -n $var ]]
-}
-
-is_file() {
-    local file=$1
-    [[ -f $file ]]
-}
-
-is_dir() {
-    local dir=$1
-    [[ -d $dir ]]
-}
-
-
-usage_no_url() {
-
-		echo ""
-		echo "*** You must provide an url to download. ***"
-		echo ""
-		exit 1
-}
-
-function cmdline() {
-
-	while [[ $# -gt 1 ]]
-	do
-		key="$1"
-
-		case $key in
-			-p|--page)
-				local INDEX_PAGE_URL="$2"
-				carts_from_url "$INDEX_PAGE_URL"
-				shift # past argument
-				;;
-
-			-f|--file)
-				local FILE="$2"
-				carts_from_file "$FILE"
-				shift # past argument
-				;;
-
-			*)
-			       # unknown option
-			;;
-		esac
-		shift # past argument or value
-	done
-
-	if [[ -n $1 ]]; then
-		local URL="$1"
-		cart_download "$URL"
-	fi
-}
-
-function carts_from_url() {
-
-	local URL="$1"
-	download_tmp_html_page "$URL"
-	get_carts_from_file "$TMPFILE"
-}
-
-
-function carts_from_file() {
-
-	local FILE="$1"
-	get_carts_from_file "$FILE"
+    echo "${AUTHOR}_${TITLE}_${TID}.p8.png"
 }
 
 function get_carts_from_file() {
+    local FILE="$1"
 
-	local FILE="$1"
-	
-	cat $FILE \
-		| grep "bbs/?tid" \
-		| cut -d "=" -f 2- \
-		| cut -d "=" -f 2- \
-		| cut -d "\"" -f 1 \
-		> $TMP_TXTFILE
+    tr '\n' ' ' < "$FILE" | grep -oP '<a href="\?tid=\K[0-9]+' > "$TMP_TXTFILE"
 
-	while read line
-		do
-			local URL="$LEXALOFFLE_ID_URL""$line"
-			cart_download "$URL"
-		done < ./$TMP_TXTFILE
+    echo "[INFO] Found $(wc -l < "$TMP_TXTFILE") threads in $FILE"
 
+    while read -r TID; do
+        local URL="${LEXALOFFLE_ID_URL}${TID}"
+        cart_download "$URL"
+    done < "$TMP_TXTFILE"
 }
 
-main
+
+
+cmdline() {
+    while [[ $# -gt 1 ]]; do
+        key="$1"
+        case $key in
+            -p|--page)
+                local INDEX_PAGE="$2"
+                download_tmp_html_page "$INDEX_PAGE"
+                get_carts_from_file "$TMPFILE"
+                shift
+                ;;
+            *)
+                ;;
+        esac
+        shift
+    done
+
+    if [[ -n $1 ]]; then
+        cart_download "$1"
+    fi
+}
+
+download_tmp_html_page() {
+    local URL="$1"
+    curl -sL "$URL" -o "$TMPFILE"
+}
+
+main "$@"
